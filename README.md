@@ -1,1 +1,1 @@
-Tiny gradient generting utility.
+Tiny gradient generating utility.
