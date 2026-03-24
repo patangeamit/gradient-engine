@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Tile Gradient Generator</title>
+
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    background: #ffffff;
+    color: #111;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .top {
+    padding: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+  }
+
+  .control {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .row-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  input[type="number"] {
+    width: 60px;
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+  }
+
+  input[type="color"] {
+    width: 36px;
+    height: 28px;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+
+  input[type="range"] {
+    width: 120px;
+    cursor: pointer;
+  }
+
+  button {
+    padding: 8px 14px;
+    background: #111;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  button:hover {
+    background: #333;
+  }
+
+  button:active {
+    transform: scale(0.96);
+  }
+
+  .container {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .title {
+    font-size: 13px;
+    margin-bottom: 10px;
+    opacity: 0.7;
+  }
+
+  .grid-wrapper {
+    width: 100%;
+    max-width: min(90vw, 90vh);
+    aspect-ratio: 1 / 1;
+  }
+
+  .grid {
+    width: 100%;
+    height: 100%;
+    display: grid;
+  }
+
+  .tile {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    font-size: 10px;
+    color: rgba(0,0,0,0.6);
+  }
+</style>
+</head>
+
+<body>
+
+<div class="top">
+
+  <div class="control">
+    Rows
+    <div class="row-control">
+      <input type="range" id="rowsRange" min="2" max="15" value="10">
+      <input type="number" id="rows" value="10" min="2">
+    </div>
+  </div>
+
+  <div class="control">
+    Cols
+    <div class="row-control">
+      <input type="range" id="colsRange" min="2" max="15" value="10">
+      <input type="number" id="cols" value="10" min="2">
+    </div>
+  </div>
+
+  <div class="control">
+    TL <input type="color" id="c1" value="#ff6464">
+  </div>
+
+  <div class="control">
+    TR <input type="color" id="c2" value="#64ff64">
+  </div>
+
+  <div class="control">
+    BL <input type="color" id="c3" value="#6464ff">
+  </div>
+
+  <div class="control">
+    BR <input type="color" id="c4" value="#ffff64">
+  </div>
+
+  <button onclick="generate()">Generate</button>
+
+</div>
+
+<div class="container">
+
+  <div class="panel">
+    <div class="title">Clean Preview</div>
+    <div class="grid-wrapper">
+      <div id="gridClean" class="grid"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="title">With Hex Values</div>
+    <div class="grid-wrapper">
+      <div id="gridLabeled" class="grid"></div>
+    </div>
+  </div>
+
+</div>
+<script>
+const rows = document.getElementById("rows");
+const cols = document.getElementById("cols");
+const rowsRange = document.getElementById("rowsRange");
+const colsRange = document.getElementById("colsRange");
+
+const c1Input = document.getElementById("c1");
+const c2Input = document.getElementById("c2");
+const c3Input = document.getElementById("c3");
+const c4Input = document.getElementById("c4");
+
+const gridClean = document.getElementById("gridClean");
+const gridLabeled = document.getElementById("gridLabeled");
+
+function hexToRgb(hex) {
+  let bigint = parseInt(hex.slice(1), 16);
+  return {
+    r: (bigint >> 16) & 255,
+    g: (bigint >> 8) & 255,
+    b: bigint & 255,
+  };
+}
+
+function rgbToHex(r, g, b) {
+  return (
+    "#" +
+    [r, g, b]
+      .map(x => x.toString(16).padStart(2, "0"))
+      .join("")
+  );
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function mixColor(cA, cB, t) {
+  return {
+    r: Math.round(lerp(cA.r, cB.r, t)),
+    g: Math.round(lerp(cA.g, cB.g, t)),
+    b: Math.round(lerp(cA.b, cB.b, t)),
+  };
+}
+
+function bilinear(c1, c2, c3, c4, u, v) {
+  const top = mixColor(c1, c2, u);
+  const bottom = mixColor(c3, c4, u);
+  return mixColor(top, bottom, v);
+}
+
+function buildGrid(container, rowsVal, colsVal, showText, c1, c2, c3, c4) {
+  container.innerHTML = "";
+  container.style.gridTemplateColumns = `repeat(${colsVal}, 1fr)`;
+  container.style.gridTemplateRows = `repeat(${rowsVal}, 1fr)`;
+
+  for (let y = 0; y < rowsVal; y++) {
+    for (let x = 0; x < colsVal; x++) {
+      const u = x / (colsVal - 1);
+      const v = y / (rowsVal - 1);
+
+      const color = bilinear(c1, c2, c3, c4, u, v);
+      const hex = rgbToHex(color.r, color.g, color.b);
+
+      const tile = document.createElement("div");
+      tile.className = "tile";
+      tile.style.background = hex;
+
+      if (showText) {
+        tile.textContent = hex;
+      }
+
+      container.appendChild(tile);
+    }
+  }
+}
+
+function generate() {
+  const rowsVal = parseInt(rows.value);
+  const colsVal = parseInt(cols.value);
+
+  const c1 = hexToRgb(c1Input.value);
+  const c2 = hexToRgb(c2Input.value);
+  const c3 = hexToRgb(c3Input.value);
+  const c4 = hexToRgb(c4Input.value);
+
+  buildGrid(gridClean, rowsVal, colsVal, false, c1, c2, c3, c4);
+  buildGrid(gridLabeled, rowsVal, colsVal, true, c1, c2, c3, c4);
+}
+
+function sync(a, b) {
+  a.addEventListener("input", () => {
+    b.value = a.value;
+    generate();
+  });
+}
+
+sync(rowsRange, rows);
+sync(rows, rowsRange);
+sync(colsRange, cols);
+sync(cols, colsRange);
+
+generate();
+</script>
+
+</body>
+</html>
